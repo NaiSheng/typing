@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Typing Master - 專業英文打字練習</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        /* 主題變數定義 */
+        :root {
+            --bg-color: #1a1a1b;
+            --main-color: #e2b714;
+            --sub-color: #646669;
+            --text-color: #d1d0c5;
+            --error-color: #ca4754;
+            --correct-color: #93c47d;
+            --caret-color: #e2b714;
+        }
+
+        [data-theme="light"] {
+            --bg-color: #ffffff;
+            --main-color: #007bff;
+            --sub-color: #b0b0b0;
+            --text-color: #212529;
+            --error-color: #dc3545;
+            --correct-color: #28a745;
+            --caret-color: #007bff;
+        }
+
+        [data-theme="hacker"] {
+            --bg-color: #000000;
+            --main-color: #00ff41;
+            --sub-color: #004411;
+            --text-color: #00ff41;
+            --error-color: #ff0000;
+            --correct-color: #55ff55;
+            --caret-color: #00ff41;
+        }
+
+        [data-theme="ocean"] {
+            --bg-color: #0f172a;
+            --main-color: #38bdf8;
+            --sub-color: #475569;
+            --text-color: #f1f5f9;
+            --error-color: #fb7185;
+            --correct-color: #2dd4bf;
+            --caret-color: #38bdf8;
+        }
+
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        .mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .word-container {
+            font-size: 1.75rem;
+            line-height: 3.2rem;
+            letter-spacing: 0.02em;
+            user-select: none;
+            color: var(--sub-color);
+            display: flex;
+            flex-wrap: wrap;
+            align-content: flex-start;
+        }
+
+        .word-wrapper {
+            display: inline-block;
+            white-space: nowrap;
+        }
+
+        .char {
+            position: relative;
+            border-left: 2px solid transparent;
+        }
+
+        .char.current {
+            color: var(--text-color);
+            border-left: 2px solid var(--caret-color);
+            animation: blink 1s infinite;
+        }
+
+        .char.correct {
+            color: var(--correct-color);
+        }
+
+        .char.incorrect {
+            color: var(--error-color);
+        }
+
+        @keyframes blink {
+            50% { border-color: transparent; }
+        }
+
+        .hidden-input {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .theme-dot {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: transform 0.2s;
+        }
+        .theme-dot:hover { transform: scale(1.2); }
+        .theme-dot.active { border-color: var(--text-color); }
+
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg-color); }
+        ::-webkit-scrollbar-thumb {
+            background: var(--sub-color);
+            border-radius: 4px;
+        }
+
+        /* 圖表 Modal 優化 */
+        #chart-modal {
+            background: rgba(0, 0, 0, 0.4);
+        }
+        
+        .chart-container-inner {
+            background: var(--bg-color);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center py-12 px-4">
+
+    <!-- 載入動畫 -->
+    <div id="loading-overlay" class="fixed inset-0 flex flex-col items-center justify-center bg-[#1a1a1b] z-50 transition-opacity duration-500">
+        <div class="w-16 h-16 border-4 border-[#e2b714] border-t-transparent rounded-full animate-spin mb-4"></div>
+        <p class="text-[#e2b714] font-medium tracking-widest text-lg">正在準備單字庫...</p>
+    </div>
+
+    <div class="w-full max-w-5xl">
+        <header class="flex flex-col lg:flex-row justify-between items-center mb-12 gap-8">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-[var(--main-color)] rounded-lg flex items-center justify-center text-[var(--bg-color)] font-bold text-xl transition-colors">T</div>
+                <h1 class="text-2xl font-bold tracking-tight text-[var(--main-color)] transition-colors">Typing Master</h1>
+            </div>
+            
+            <div class="flex flex-wrap items-center gap-6">
+                <!-- 配色選擇器 -->
+                <div class="flex items-center gap-3 bg-black/20 p-2 px-4 rounded-xl">
+                    <span class="text-[10px] font-bold opacity-40 uppercase tracking-widest">配色</span>
+                    <div class="flex gap-2">
+                        <div onclick="setTheme('default')" class="theme-dot active" style="background-color: #e2b714;" title="預設暗色"></div>
+                        <div onclick="setTheme('light')" class="theme-dot" style="background-color: #007bff;" title="淺色模式"></div>
+                        <div onclick="setTheme('hacker')" class="theme-dot" style="background-color: #00ff41;" title="極客黑客"></div>
+                        <div onclick="setTheme('ocean')" class="theme-dot" style="background-color: #38bdf8;" title="深海之藍"></div>
+                    </div>
+                </div>
+
+                <!-- 長度選擇器 -->
+                <nav class="flex items-center gap-4 bg-black/20 p-1.5 rounded-xl">
+                    <span class="text-xs font-bold px-3 opacity-40 uppercase tracking-widest">目標長度</span>
+                    <div id="length-selector" class="flex gap-1">
+                        <button onclick="setLength(100)" class="px-4 py-1.5 rounded-lg transition-all duration-200 text-sm font-medium" data-len="100">100</button>
+                        <button onclick="setLength(200)" class="px-4 py-1.5 rounded-lg transition-all duration-200 text-sm font-medium" data-len="200">200</button>
+                        <button onclick="setLength(500)" class="px-4 py-1.5 rounded-lg transition-all duration-200 text-sm font-medium" data-len="500">500</button>
+                        <button onclick="setLength(1000)" class="px-4 py-1.5 rounded-lg transition-all duration-200 text-sm font-medium" data-len="1000">1000</button>
+                    </div>
+                </nav>
+            </div>
+        </header>
+
+        <main id="game-area" class="relative mb-12 cursor-text group" onclick="focusInput()">
+            <div id="display-text" class="word-container mono p-2"></div>
+            <input type="text" id="typing-input" class="hidden-input" autocomplete="off" spellcheck="false">
+            
+            <div id="focus-error" class="absolute inset-0 flex items-center justify-center bg-[var(--bg-color)]/80 backdrop-blur-sm opacity-0 pointer-events-none transition-opacity duration-300 rounded-xl">
+                <p class="text-[var(--main-color)] flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M3 3a1 1 0 011-1h12a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V3zm10 4a1 1 0 10-2 0 1 1 0 002 0zm-3 4a1 1 0 100-2 1 1 0 000 2zm3 4a1 1 0 10-2 0 1 1 0 002 0z"/></svg>
+                    點擊開始打字
+                </p>
+            </div>
+        </main>
+
+        <div class="w-full h-1 bg-white/5 rounded-full overflow-hidden mb-16">
+            <div id="progress-bar" class="h-full bg-[var(--main-color)] transition-all duration-300" style="width: 0%"></div>
+        </div>
+
+        <section class="w-full">
+            <div class="flex items-center justify-between mb-6">
+                <div class="flex items-center gap-4">
+                    <h2 class="text-lg font-bold opacity-80 flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-[var(--main-color)]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        近期練習紀錄
+                    </h2>
+                    <button onclick="toggleChartModal(true)" class="flex items-center gap-2 text-xs px-4 py-1.5 bg-[var(--main-color)] text-[var(--bg-color)] font-bold rounded-full hover:shadow-[0_0_15px_rgba(226,183,20,0.3)] transition-all active:scale-95">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/></svg>
+                        查看趨勢圖表
+                    </button>
+                </div>
+                <button onclick="clearHistory()" class="text-xs opacity-40 hover:opacity-100 transition">清除紀錄</button>
+            </div>
+            <div class="bg-black/20 rounded-2xl overflow-hidden shadow-lg border border-white/5">
+                <table class="w-full text-left border-separate border-spacing-0">
+                    <thead class="bg-black/20 text-xs font-bold uppercase tracking-widest text-gray-500">
+                        <tr>
+                            <th class="px-6 py-4">時間</th>
+                            <th class="px-6 py-4">長度</th>
+                            <th class="px-6 py-4">WPM</th>
+                            <th class="px-6 py-4">正確率</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-body" class="text-sm"></tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+
+    <!-- 結果彈窗 -->
+    <div id="result-modal" class="fixed inset-0 bg-[var(--bg-color)]/95 hidden flex items-center justify-center p-4 z-50 backdrop-blur-md">
+        <div class="max-w-2xl w-full text-center p-8 sm:p-12">
+            <p class="text-[var(--sub-color)] font-bold uppercase tracking-[0.3em] mb-4">Practice Finished</p>
+            <h2 class="text-6xl font-bold text-[var(--main-color)] mb-12">統計結果</h2>
+            <div class="grid grid-cols-2 gap-8 mb-12">
+                <div class="flex flex-col items-center">
+                    <span class="text-5xl font-bold mono" id="final-wpm">0</span>
+                    <span class="text-sm opacity-40 uppercase tracking-widest mt-2">WPM</span>
+                </div>
+                <div class="flex flex-col items-center">
+                    <span class="text-5xl font-bold mono" id="final-acc">0%</span>
+                    <span class="text-sm opacity-40 uppercase tracking-widest mt-2">Accuracy</span>
+                </div>
+            </div>
+            <div class="flex flex-col sm:flex-row gap-4 justify-center">
+                <button onclick="resetGame()" class="px-12 py-4 bg-[var(--main-color)] text-[var(--bg-color)] rounded-xl font-bold text-lg transition-transform hover:scale-105 active:scale-95">再次練習 (Enter)</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 圖表彈窗 -->
+    <div id="chart-modal" class="fixed inset-0 hidden z-[60] flex flex-col items-center justify-center p-4 sm:p-6 backdrop-blur-md">
+        <div class="w-full max-w-4xl chart-container-inner rounded-[2.5rem] p-8 sm:p-12 relative overflow-hidden">
+            <!-- 裝飾性背景 -->
+            <div class="absolute -top-24 -right-24 w-64 h-64 bg-[var(--main-color)] opacity-[0.03] rounded-full blur-3xl"></div>
+            
+            <div class="flex justify-between items-start mb-10 relative z-10">
+                <div>
+                    <h3 class="text-3xl font-bold text-[var(--main-color)] mb-2">進度趨勢分析</h3>
+                    <div class="flex items-center gap-3">
+                        <span class="text-[10px] px-2 py-0.5 bg-[var(--main-color)] text-[var(--bg-color)] font-bold rounded uppercase">Recent 10</span>
+                        <p class="text-sm opacity-40 font-medium tracking-wide">視覺化練習表現數據</p>
+                    </div>
+                </div>
+                <button onclick="toggleChartModal(false)" class="p-3 hover:bg-white/5 rounded-2xl transition-all active:scale-90 border border-white/5">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+            </div>
+
+            <div class="relative h-[350px] sm:h-[450px] w-full z-10">
+                <canvas id="statChart"></canvas>
+            </div>
+            
+            <div class="mt-8 flex justify-center gap-8 text-[10px] font-bold uppercase tracking-widest opacity-30 relative z-10">
+                <div class="flex items-center gap-2"><div class="w-3 h-3 rounded-full bg-[var(--main-color)]"></div> WPM Speed</div>
+                <div class="flex items-center gap-2"><div class="w-3 h-3 rounded-full bg-[var(--correct-color)]"></div> Accuracy %</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let commonWords = [];
+        let targetLength = 100;
+        let textToType = "";
+        let startTime = null;
+        let currentIndex = 0;
+        let isGameActive = false;
+        let history = JSON.parse(localStorage.getItem('typing_master_v2') || '[]');
+        let chartInstance = null;
+        
+        const displayText = document.getElementById('display-text');
+        const typingInput = document.getElementById('typing-input');
+        const historyBody = document.getElementById('history-body');
+        const loadingOverlay = document.getElementById('loading-overlay');
+        const progressBar = document.getElementById('progress-bar');
+        const focusError = document.getElementById('focus-error');
+
+        function setTheme(themeName) {
+            if (themeName === 'default') {
+                document.documentElement.removeAttribute('data-theme');
+            } else {
+                document.documentElement.setAttribute('data-theme', themeName);
+            }
+            localStorage.setItem('typing_theme', themeName);
+            
+            document.querySelectorAll('.theme-dot').forEach(dot => {
+                const title = dot.getAttribute('title');
+                const maps = { default: '預設暗色', light: '淺色模式', hacker: '極客黑客', ocean: '深海之藍' };
+                dot.classList.toggle('active', maps[themeName] === title);
+            });
+
+            if (chartInstance) renderChart();
+        }
+
+        async function fetchWords() {
+            const url = "https://raw.githubusercontent.com/first20hours/google-10000-english/master/google-10000-english-no-swears.txt";
+            try {
+                const response = await fetch(url);
+                const text = await response.text();
+                commonWords = text.split('\n').map(w => w.trim().toLowerCase()).filter(w => w.length >= 2);
+                loadingOverlay.style.opacity = '0';
+                setTimeout(() => loadingOverlay.style.display = 'none', 500);
+                
+                const savedTheme = localStorage.getItem('typing_theme') || 'default';
+                setTheme(savedTheme);
+                initGame();
+            } catch (error) { alert("單字庫載入失敗。"); }
+        }
+
+        /**
+         * 修改後的單字生成邏輯：
+         * 1. 確保總長度「至少」達到目標
+         * 2. 只包含完整的單字，不補隨機字元
+         */
+        function generateText(len) {
+            let resultWords = [];
+            let currentLen = 0;
+            
+            while (currentLen < len) {
+                const word = commonWords[Math.floor(Math.random() * commonWords.length)];
+                resultWords.push(word);
+                // currentLen 計算：單字長度 + 1 (空白，最後一個單字不影響整體判斷)
+                currentLen += word.length + 1;
+            }
+            
+            return resultWords.join(' ').trim();
+        }
+
+        function initGame() {
+            if (commonWords.length === 0) return;
+            textToType = generateText(targetLength);
+            let globalCharIndex = 0;
+            const wordsArray = textToType.split(' ');
+            let htmlContent = "";
+
+            wordsArray.forEach((word, wordIdx) => {
+                htmlContent += `<div class="word-wrapper">`;
+                for (let i = 0; i < word.length; i++) {
+                    htmlContent += `<span class="char ${globalCharIndex === 0 ? 'current' : ''}" data-idx="${globalCharIndex}">${word[i]}</span>`;
+                    globalCharIndex++;
+                }
+                if (wordIdx < wordsArray.length - 1) {
+                    htmlContent += `<span class="char" data-idx="${globalCharIndex}">&nbsp;</span>`;
+                    globalCharIndex++;
+                }
+                htmlContent += `</div>`;
+            });
+
+            displayText.innerHTML = htmlContent;
+            currentIndex = 0;
+            startTime = null;
+            isGameActive = true;
+            typingInput.value = "";
+            progressBar.style.width = "0%";
+            updateHistoryUI();
+            setActiveLengthButton();
+        }
+
+        function setLength(len) {
+            targetLength = len;
+            resetGame();
+        }
+
+        function setActiveLengthButton() {
+            document.querySelectorAll('#length-selector button').forEach(btn => {
+                const isSelected = parseInt(btn.getAttribute('data-len')) === targetLength;
+                btn.className = isSelected 
+                    ? "px-4 py-1.5 rounded-lg text-sm font-bold bg-[var(--main-color)] text-[var(--bg-color)] shadow-lg"
+                    : "px-4 py-1.5 rounded-lg text-sm font-medium hover:text-[var(--main-color)] text-[var(--sub-color)]";
+            });
+        }
+
+        function focusInput() {
+            typingInput.focus();
+            focusError.style.opacity = '0';
+        }
+
+        typingInput.addEventListener('keydown', (e) => {
+            if (!isGameActive) return;
+            const charElements = displayText.querySelectorAll('.char');
+            if (e.key === 'Backspace' && currentIndex > 0) {
+                charElements[currentIndex].classList.remove('current');
+                currentIndex--;
+                charElements[currentIndex].classList.remove('correct', 'incorrect');
+                charElements[currentIndex].classList.add('current');
+            }
+        });
+
+        typingInput.addEventListener('input', (e) => {
+            if (!isGameActive) return;
+            const val = typingInput.value;
+            if (val.length === 0) return; 
+            if (!startTime) startTime = new Date();
+
+            const charElements = displayText.querySelectorAll('.char');
+            const typedChar = val[val.length - 1];
+            const expectedChar = textToType[currentIndex];
+
+            charElements[currentIndex].classList.remove('current');
+            if (typedChar === expectedChar) {
+                charElements[currentIndex].classList.add('correct');
+            } else {
+                charElements[currentIndex].classList.add('incorrect');
+            }
+
+            currentIndex++;
+            if (currentIndex < textToType.length) {
+                charElements[currentIndex].classList.add('current');
+            } else {
+                finishGame();
+            }
+            progressBar.style.width = `${(currentIndex / textToType.length) * 100}%`;
+            typingInput.value = "";
+        });
+
+        typingInput.addEventListener('blur', () => { if(isGameActive) focusError.style.opacity = '1'; });
+
+        function finishGame() {
+            isGameActive = false;
+            const endTime = new Date();
+            const timeElapsed = (endTime - startTime) / 60000;
+            const wpm = Math.round((textToType.length / 5) / timeElapsed);
+            const correctChars = displayText.querySelectorAll('.char.correct').length;
+            const acc = Math.round((correctChars / textToType.length) * 100);
+
+            document.getElementById('final-wpm').innerText = wpm;
+            document.getElementById('final-acc').innerText = acc + '%';
+            document.getElementById('result-modal').classList.remove('hidden');
+            saveHistory(wpm, acc);
+        }
+
+        function saveHistory(wpm, acc) {
+            const entry = {
+                timestamp: new Date().getTime(),
+                date: new Date().toLocaleString('zh-TW', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }),
+                len: textToType.length, // 儲存實際產出的長度
+                wpm, acc
+            };
+            history.unshift(entry);
+            if (history.length > 50) history.pop();
+            localStorage.setItem('typing_master_v2', JSON.stringify(history));
+            updateHistoryUI();
+        }
+
+        function updateHistoryUI() {
+            historyBody.innerHTML = history.length ? history.slice(0, 8).map(item => `
+                <tr class="hover:bg-white/5 transition-colors group">
+                    <td class="px-6 py-4 opacity-40 group-hover:opacity-100">${item.date}</td>
+                    <td class="px-6 py-4 font-medium">${item.len} <span class="text-[10px] opacity-30">字元</span></td>
+                    <td class="px-6 py-4 font-bold text-[var(--main-color)]">${item.wpm}</td>
+                    <td class="px-6 py-4 font-mono text-[var(--correct-color)]">${item.acc}%</td>
+                </tr>
+            `).join('') : `<tr><td colspan="4" class="px-6 py-12 text-center opacity-30">尚未有紀錄</td></tr>`;
+        }
+
+        function clearHistory() {
+            if(confirm('確定要清除所有練習紀錄嗎？此動作無法復原。')) {
+                history = [];
+                localStorage.removeItem('typing_master_v2');
+                updateHistoryUI();
+            }
+        }
+
+        function resetGame() {
+            document.getElementById('result-modal').classList.add('hidden');
+            initGame();
+            setTimeout(focusInput, 100);
+        }
+
+        function toggleChartModal(show) {
+            const modal = document.getElementById('chart-modal');
+            if (show) {
+                if (history.length < 2) {
+                    alert('需要至少 2 筆紀錄才能生成趨勢圖表。');
+                    return;
+                }
+                modal.classList.remove('hidden');
+                setTimeout(renderChart, 50);
+            } else {
+                modal.classList.add('hidden');
+            }
+        }
+
+        function renderChart() {
+            const ctx = document.getElementById('statChart').getContext('2d');
+            const limitedHistory = history.slice(0, 10).reverse();
+            
+            const labels = limitedHistory.map(item => {
+                const parts = item.date.split(' ');
+                return parts[1] || item.date;
+            });
+            
+            const fullTimestamps = limitedHistory.map(item => item.date);
+            const wpmData = limitedHistory.map(item => item.wpm);
+            const accData = limitedHistory.map(item => item.acc);
+
+            const computedStyle = getComputedStyle(document.documentElement);
+            const mainColor = computedStyle.getPropertyValue('--main-color').trim();
+            const correctColor = computedStyle.getPropertyValue('--correct-color').trim();
+            const textColor = computedStyle.getPropertyValue('--text-color').trim();
+
+            if (chartInstance) chartInstance.destroy();
+
+            chartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: '打字速度 (WPM)',
+                            data: wpmData,
+                            borderColor: mainColor,
+                            backgroundColor: (context) => {
+                                const chart = context.chart;
+                                const {ctx, chartArea} = chart;
+                                if (!chartArea) return null;
+                                const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+                                gradient.addColorStop(0, mainColor + '40');
+                                gradient.addColorStop(1, mainColor + '00');
+                                return gradient;
+                            },
+                            fill: true,
+                            tension: 0.45,
+                            pointRadius: 6,
+                            pointBackgroundColor: mainColor,
+                            pointBorderColor: 'white',
+                            pointBorderWidth: 2,
+                            pointHoverRadius: 9,
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: '正確率 (%)',
+                            data: accData,
+                            borderColor: correctColor,
+                            backgroundColor: 'transparent',
+                            borderWidth: 3,
+                            borderDash: [6, 4],
+                            tension: 0.4,
+                            pointRadius: 4,
+                            pointBackgroundColor: 'white',
+                            pointBorderColor: correctColor,
+                            pointBorderWidth: 2,
+                            yAxisID: 'y1'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    layout: { padding: { top: 10, bottom: 0 } },
+                    interaction: { mode: 'index', intersect: false },
+                    scales: {
+                        x: { 
+                            grid: { display: false }, 
+                            ticks: { 
+                                color: textColor + '60',
+                                font: { family: 'JetBrains Mono', size: 11 }
+                            } 
+                        },
+                        y: { 
+                            position: 'left',
+                            title: { display: true, text: 'WPM SPEED', color: mainColor, font: { weight: 'bold', size: 10 } },
+                            grid: { color: textColor + '08' },
+                            ticks: { color: mainColor, font: { family: 'JetBrains Mono' } }
+                        },
+                        y1: {
+                            position: 'right',
+                            title: { display: true, text: 'ACCURACY %', color: correctColor, font: { weight: 'bold', size: 10 } },
+                            grid: { display: false },
+                            min: 0, max: 100,
+                            ticks: { color: correctColor, font: { family: 'JetBrains Mono' } }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            titleFont: { family: 'JetBrains Mono', size: 13 },
+                            bodyFont: { family: 'Noto Sans TC', size: 12 },
+                            padding: 15,
+                            cornerRadius: 12,
+                            displayColors: true,
+                            callbacks: {
+                                title: (items) => `練習時間: ${fullTimestamps[items[0].dataIndex]}`,
+                                label: (item) => {
+                                    let label = item.dataset.label || '';
+                                    if (label) label += ': ';
+                                    label += item.formattedValue;
+                                    return label;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !document.getElementById('result-modal').classList.contains('hidden')) resetGame();
+            if (e.key === 'Escape') {
+                toggleChartModal(false);
+                document.getElementById('result-modal').classList.add('hidden');
+            }
+            if (document.activeElement !== typingInput && e.key.length === 1 && !document.getElementById('result-modal').classList.contains('hidden')) focusInput();
+        });
+
+        window.onload = fetchWords;
+    </script>
+</body>
+</html>
